@@ -1,0 +1,41 @@
+<svg width="1200" height="300" viewBox="0 0 1200 300" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Guillotine — the headless accelerator">
+  <defs>
+    <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d0d7de"/>
+      <stop offset="1" stop-color="#8c959f"/>
+    </linearGradient>
+    <clipPath id="cut-keep">
+      <polygon points="0,0 646,0 612,300 0,300"/>
+    </clipPath>
+    <clipPath id="cut-drop">
+      <polygon points="646,0 1200,0 1200,300 612,300"/>
+    </clipPath>
+  </defs>
+
+  <!-- wordmark, sliced: the right piece has dropped -->
+  <g font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-weight="700" font-size="58" letter-spacing="14">
+    <text x="600" y="106" text-anchor="middle" fill="#1f2328" clip-path="url(#cut-keep)">GUILLOTINE</text>
+    <text x="603" y="115" text-anchor="middle" fill="#1f2328" clip-path="url(#cut-drop)">GUILLOTINE</text>
+  </g>
+  <line x1="643" y1="48" x2="617" y2="136" stroke="#cf222e" stroke-width="2.5" stroke-linecap="round"/>
+
+  <text x="600" y="152" text-anchor="middle" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-size="15" letter-spacing="6" fill="#57606a">THE HEADLESS ACCELERATOR</text>
+
+  <!-- left: the JSON tool-schema wall -->
+  <g font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-size="13" fill="#57606a" opacity="0.55">
+    <text x="70" y="200">{"type": "function", "name": "issues_list",</text>
+    <text x="70" y="219">&#160;"description": "List issues. Supports filters",</text>
+    <text x="70" y="238">&#160;"parameters": {"type": "object", "properties": {</text>
+    <text x="70" y="257" font-style="italic" opacity="0.7">&#8230; hundreds more lines of JSON tool schema</text>
+  </g>
+
+  <!-- the blade -->
+  <polygon points="590,185 650,185 650,257 590,227" fill="url(#blade)"/>
+  <line x1="590" y1="227" x2="650" y2="257" stroke="#cf222e" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- right: one clean line of DSL -->
+  <g font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">
+    <text x="690" y="228" font-size="16" fill="#0550ae">c.issues.list(state="open").head(5)</text>
+    <text x="690" y="252" font-size="12" fill="#57606a" opacity="0.8"># typed &#183; guarded &#183; distilled</text>
+  </g>
+</svg>

@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: Acme Tasks
+  version: "1.2.3"
+servers:
+  - url: https://api.example.test
+paths:
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: List tasks
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, closed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /tasks/{task_id}:
+    parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [tasks]
+      operationId: getTask
+      summary: Get a task
+    delete:
+      tags: [tasks]
+      operationId: deleteTask
+      summary: Delete a task
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: List users

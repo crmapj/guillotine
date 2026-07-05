@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a compiler, DSL, runtime, or OSS workflow improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or agent workflow is blocked?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should Guillotine generate or do differently?
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example API or DSL shape
+      description: Include a small OpenAPI snippet or desired generated Python.
+      render: python

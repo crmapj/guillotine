@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "guillotine-gen"
+version = "0.1.0"
+description = "Generate compact, typed Python DSLs, skills, and code-mode MCP wrappers from OpenAPI specs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Christiaan Burrett" }]
+keywords = [
+  "agents",
+  "code-generation",
+  "dsl",
+  "mcp",
+  "openapi",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Code Generators",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
+dependencies = [
+  "PyYAML>=6.0.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/crmapj/guillotine"
+Documentation = "https://github.com/crmapj/guillotine#readme"
+Issues = "https://github.com/crmapj/guillotine/issues"
+Source = "https://github.com/crmapj/guillotine"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pip-audit>=2.7",
+  "pytest>=8.2",
+  "ruff>=0.5",
+  "twine>=5.1",
+]
+mcp = [
+  "mcp>=1.10,<2",
+]
+
+[project.scripts]
+guillotine = "guillotine.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/guillotine"]
+artifacts = ["src/guillotine/py.typed"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/CHANGELOG.md",
+  "/CODE_OF_CONDUCT.md",
+  "/CONTRIBUTING.md",
+  "/LICENSE",
+  "/README.md",
+  "/ROADMAP.md",
+  "/SECURITY.md",
+  "/SUPPORT.md",
+  "/docs",
+  "/examples/README.md",
+  "/pyproject.toml",
+  "/src",
+  "/tests",
+]
+exclude = [
+  "/examples/generated",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["examples/generated"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "UP042"]

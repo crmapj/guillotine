@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible Guillotine bug.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What failed?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include the smallest OpenAPI spec or command sequence that reproduces the problem.
+      value: |
+        ```bash
+        guillotine inspect ...
+        guillotine build ...
+        ```
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Guillotine version
+      placeholder: "0.1.0 or commit SHA"
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "python --version"
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or traceback
+      render: text
