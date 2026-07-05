@@ -50,9 +50,15 @@ def load_openapi(path: str | Path, *, package_name: str | None = None) -> ApiSpe
 
     openapi = str(document.get("openapi", ""))
     if not openapi.startswith("3."):
-        raise ValueError(
-            f"{spec_path} is not an OpenAPI 3 document. Found openapi={openapi!r}."
-        )
+        swagger = document.get("swagger")
+        if swagger is not None:
+            found = (
+                f"Found swagger={str(swagger)!r} "
+                "(Swagger 2.0 is not supported; convert to OpenAPI 3)"
+            )
+        else:
+            found = f"Found openapi={openapi!r}"
+        raise ValueError(f"{spec_path} is not an OpenAPI 3 document. {found}.")
 
     info = document.get("info") or {}
     title = str(info.get("title") or spec_path.stem)
@@ -60,7 +66,7 @@ def load_openapi(path: str | Path, *, package_name: str | None = None) -> ApiSpe
     pkg = _identifier(package_name or title, fallback="api")
 
     servers = [
-        str(server.get("url"))
+        _expand_server_url(server)
         for server in document.get("servers", [])
         if isinstance(server, dict) and server.get("url")
     ]
@@ -128,6 +134,28 @@ def load_openapi(path: str | Path, *, package_name: str | None = None) -> ApiSpe
         resources=resources,
         security_schemes=dict(security_schemes),
     )
+
+
+def _expand_server_url(server: dict[str, Any]) -> str:
+    """Substitute `{var}` templates in a `servers[].url` with their declared default.
+
+    OpenAPI server URLs may carry variables (eBay's `https://api.ebay.com{basePath}`).
+    Left verbatim, `connect()` would request a literal `{basePath}` URL. Unknown vars
+    are left in place — the user can still override base_url.
+    """
+    url = str(server.get("url"))
+    variables = server.get("variables")
+    if not isinstance(variables, dict):
+        return url
+
+    def _replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        var = variables.get(name)
+        if isinstance(var, dict) and var.get("default") is not None:
+            return str(var["default"])
+        return match.group(0)
+
+    return re.sub(r"{([^}]+)}", _replace, url)
 
 
 def _load_document(path: Path) -> dict[str, Any]:
@@ -290,8 +318,12 @@ def _body_fields(
     if not isinstance(props, dict):
         return ()
     required = set(schema.get("required") or [])
+    # Order required fields first before applying the cap, so a spec that lists its
+    # required fields late (Adyen's POST /payments) never drops them from the IR.
+    # Stable within each group, so the original spec order is otherwise preserved.
+    ordered = sorted(props.items(), key=lambda item: item[0] not in required)
     fields = []
-    for name, raw_prop in list(props.items())[:_MAX_BODY_FIELDS]:
+    for name, raw_prop in ordered[:_MAX_BODY_FIELDS]:
         prop = _resolve_schema_ref(document, raw_prop)
         fields.append(
             BodyField(
@@ -589,6 +621,38 @@ _DESTRUCTIVE_TERMS = frozenset(
     }
 )
 
+# Strong destructive terms whose mere mention in a *description* is a reliable
+# signal. Soft terms (`transfer`, `remove`, `cancel`, ...) collide with harmless
+# nouns and prose ("this event is emitted when a record is removed"), so we only
+# match those in the operation *name*, never in free-text descriptions. This keeps
+# the conservative name-based bias while stopping description-only false positives
+# such as Plaid's read-only `transactions_sync` (its summary says "removed").
+_STRONG_DESTRUCTIVE_TERMS = frozenset(
+    {"delete", "destroy", "purge", "wipe", "erase", "expunge", "shred", "truncate"}
+)
+
+# Last-token verbs that clearly mark a read. A destructive noun colliding with the
+# product name (Plaid's whole "Transfer" product: `bank_transfer_balance_get`,
+# `bank_transfer_event_list`) must not flag an obvious read as needing `yes=True`.
+# These exempt an op from name/description term matching only — never from the
+# explicit `x-guillotine-safety-tier` override or DELETE-method tiering.
+_READ_VERBS = frozenset(
+    {
+        "get",
+        "list",
+        "search",
+        "retrieve",
+        "read",
+        "fetch",
+        "show",
+        "sync",
+        "query",
+        "count",
+        "export",
+        "download",
+    }
+)
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
@@ -615,16 +679,33 @@ def _safety_tier(
         return override
     if method in {"GET", "HEAD", "OPTIONS"}:
         return SafetyTier.READ
+    # A DELETE is always at least DELETE-tier; it can still escalate to CASCADE below
+    # (e.g. "recursively purge") but never de-escalates, even for a read-shaped name.
+    floor = SafetyTier.DELETE if method == "DELETE" else SafetyTier.WRITE
+    # An op whose name clearly reads (last token is get/list/sync/...) can't be
+    # destructive on its own: exempt it from name/description term matching, so a
+    # destructive noun in the product name (Plaid's `bank_transfer_balance_get`)
+    # or the description no longer trips the guard. The DELETE-method floor and the
+    # explicit override above already ran, so a genuinely destructive read-shaped op
+    # (a DELETE, or one tagged via x-guillotine-safety-tier) is still tiered by those.
+    if method != "DELETE" and _is_read_named(operation_id):
+        return floor
     # Match whole tokens, not substrings, so `clearance` no longer reads as `clear`
-    # and `closet` no longer reads as `close`.
-    tokens = set(
-        _TOKEN_RE.findall(" ".join((path, operation_id, summary, description)).lower())
-    )
-    if tokens & _CASCADE_TERMS:
+    # and `closet` no longer reads as `close`. Names (path + operationId) match the
+    # full term set; free-text (summary + description) matches strong terms only, so
+    # prose like "removed"/"transfer" in a description can't flag a read.
+    name_tokens = set(_TOKEN_RE.findall(" ".join((path, operation_id)).lower()))
+    text_tokens = set(_TOKEN_RE.findall(" ".join((summary, description)).lower()))
+    if name_tokens & _CASCADE_TERMS or text_tokens & _CASCADE_TERMS:
         return SafetyTier.CASCADE
-    if method == "DELETE" or tokens & _DESTRUCTIVE_TERMS:
+    if (name_tokens & _DESTRUCTIVE_TERMS) or (text_tokens & _STRONG_DESTRUCTIVE_TERMS):
         return SafetyTier.DELETE
-    return SafetyTier.WRITE
+    return floor
+
+
+def _is_read_named(operation_id: str) -> bool:
+    tokens = _TOKEN_RE.findall(operation_id.lower())
+    return bool(tokens) and tokens[-1] in _READ_VERBS
 
 
 def _clean_space(value: str) -> str:

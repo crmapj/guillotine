@@ -170,13 +170,16 @@ def _param_sig(param: Parameter, *, required: bool) -> str:
 
 
 def _body_field_lines(fields: tuple[BodyField, ...]) -> list[str]:
+    # Show required fields first before the cap, so a spec that lists required
+    # fields late never hides them behind the "... N more" marker in the docstring.
+    ordered = sorted(fields, key=lambda field: not field.required)
     lines = []
-    for field in fields[:24]:
+    for field in ordered[:24]:
         kind = "required" if field.required else "optional"
         choices = f" [choices: {', '.join(map(str, field.enum))}]" if field.enum else ""
         lines.append(f"- {field.name} ({field.annotation}, {kind}){choices}")
-    if len(fields) > 24:
-        lines.append(f"- ... and {len(fields) - 24} more field(s)")
+    if len(ordered) > 24:
+        lines.append(f"- ... and {len(ordered) - 24} more field(s)")
     return lines
 
 

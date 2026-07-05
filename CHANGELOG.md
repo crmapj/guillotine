@@ -50,3 +50,16 @@ Hardening in this MVP:
   `x-www-form-urlencoded` bodies, and fails loudly on `multipart/form-data`.
 - One shared pagination predicate for the emitter and `inspect`, so `.all()` only walks
   operations with a real cursor pair.
+- Required body fields are never dropped by the field cap: both the ingest cap and the
+  docstring cap order required fields first (stable within each group), so a spec that
+  lists required fields late (e.g. Adyen `POST /payments`) keeps them in the IR,
+  `help_json`, and the generated docstring instead of hiding them behind truncation.
+- Server URL template variables (`servers[].url` like `https://api.ebay.com{basePath}`)
+  are expanded from `servers[].variables[...].default`, so `connect()` no longer requests
+  a literal `{basePath}` URL. Unknown variables are left in place for the user to override.
+- Destructive-tier matching no longer flags reads: an operation whose name clearly reads
+  (last token in get/list/search/sync/…) is exempt from name/description term matching
+  (Plaid's `bank_transfer_balance_get` is no longer treated as destructive), and only
+  strong terms (delete/destroy/purge/wipe/…) match in free-text descriptions, so prose
+  like "removed"/"transfer" can't trip the guard. The explicit `x-guillotine-safety-tier`
+  override and DELETE-method tiering are unaffected, keeping the conservative bias.

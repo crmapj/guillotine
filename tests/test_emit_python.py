@@ -452,6 +452,49 @@ def test_body_enum_is_exposed_in_help_and_guarded(tmp_path: Path) -> None:
     assert transport.calls[0]["method"] == "POST"
 
 
+def test_required_body_fields_appear_in_docstring_despite_cap(tmp_path: Path) -> None:
+    # 30 optional fields listed first, then required fields last (Adyen shape). The
+    # docstring cap must not bury the required fields behind the "... N more" marker.
+    optional_props = "\n".join(
+        f"                            opt_{i}: {{type: string}}" for i in range(30)
+    )
+    fixture = tmp_path / "late_required.yaml"
+    fixture.write_text(
+        dedent(
+            f"""
+            openapi: 3.0.3
+            info:
+              title: Late Required
+              version: "1.0"
+            servers:
+              - url: https://api.example.test
+            paths:
+              /payments:
+                post:
+                  tags: [payments]
+                  operationId: createPayment
+                  requestBody:
+                    required: true
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          required: [reference, return_url]
+                          properties:
+{optional_props}
+                            reference: {{type: string}}
+                            return_url: {{type: string}}
+            """
+        ),
+        encoding="utf-8",
+    )
+    mod = _import_generated(tmp_path, fixture=fixture, package_name="late_required")
+
+    doc = mod.help_json("payments.create")["doc"]
+    assert "reference (str, required)" in doc
+    assert "return_url (str, required)" in doc
+
+
 def test_response_shape_unwraps_collection_and_keeps_object(tmp_path: Path) -> None:
     fixture = tmp_path / "shapes.yaml"
     fixture.write_text(

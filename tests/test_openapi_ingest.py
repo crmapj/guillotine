@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
+import pytest
+
 from guillotine.ingest import load_openapi
 from guillotine.ir import SafetyTier
 
@@ -212,6 +214,133 @@ def test_load_openapi_resolves_schema_ref_enums(tmp_path: Path) -> None:
 
     status = spec.resources[0].operations[0].parameters[0]
     assert status.enum == ("open", "closed")
+
+
+def test_required_body_fields_survive_the_truncation_cap(tmp_path: Path) -> None:
+    # ~30 optional fields listed first, required fields last (Adyen POST /payments
+    # shape). Required-first ordering must keep the required fields in the IR even
+    # after the body-field cap, so they are never invisible to help_json.
+    optional_props = "\n".join(
+        f"                            opt_{i}: {{type: string}}" for i in range(30)
+    )
+    body = f"""
+              /payments:
+                post:
+                  tags: [payments]
+                  operationId: createPayment
+                  requestBody:
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          required: [reference, return_url]
+                          properties:
+{optional_props}
+                            reference: {{type: string}}
+                            return_url: {{type: string}}
+            """
+    spec = load_openapi(_single_op_spec(tmp_path, body))
+    fields = {f.name: f for f in spec.resources[0].operations[0].request_body.fields}
+    assert "reference" in fields
+    assert "return_url" in fields
+    assert fields["reference"].required is True
+    assert fields["return_url"].required is True
+
+
+def test_server_url_template_variables_are_expanded(tmp_path: Path) -> None:
+    spec_path = tmp_path / "servers.yaml"
+    spec_path.write_text(
+        dedent(
+            """
+            openapi: 3.0.3
+            info:
+              title: Templated
+              version: "1.0"
+            servers:
+              - url: "https://{region}.api.example.com{basePath}"
+                variables:
+                  region: {default: "eu"}
+                  basePath: {default: "/v2"}
+            paths:
+              /things:
+                get:
+                  tags: [things]
+                  operationId: listThings
+            """
+        ),
+        encoding="utf-8",
+    )
+    spec = load_openapi(spec_path)
+    assert spec.default_server == "https://eu.api.example.com/v2"
+
+
+def test_read_named_post_is_not_flagged_destructive(tmp_path: Path) -> None:
+    # Plaid's Transfer product: a POST named `bank_transfer_balance_get` is a read
+    # despite the `transfer` noun. It must not demand yes=True.
+    body = """
+              /bank_transfer/balance/get:
+                post:
+                  tags: [transfer]
+                  operationId: bankTransferBalanceGet
+                  summary: Get a bank transfer balance
+            """
+    assert _tier_for(tmp_path, body) is SafetyTier.WRITE
+
+
+def test_description_only_soft_term_does_not_flag_destructive(tmp_path: Path) -> None:
+    # `transactions_sync`: a read whose description mentions "removed" must not be
+    # flagged. It is both read-named and only soft terms appear in prose.
+    body = """
+              /transactions/sync:
+                post:
+                  tags: [transactions]
+                  operationId: transactionsSync
+                  summary: Get incremental transaction updates
+                  description: Returns added, modified, and removed transactions.
+            """
+    assert _tier_for(tmp_path, body) is SafetyTier.WRITE
+
+
+def test_destructive_named_post_is_still_guarded(tmp_path: Path) -> None:
+    body = """
+              /transfers/cancel:
+                post:
+                  tags: [transfers]
+                  operationId: cancelTransfer
+                  summary: Cancel a transfer
+            """
+    assert _tier_for(tmp_path, body) is SafetyTier.DELETE
+
+
+def test_delete_method_is_guarded_regardless_of_name(tmp_path: Path) -> None:
+    body = """
+              /things/{id}:
+                delete:
+                  tags: [things]
+                  operationId: thingGet
+                  summary: Retrieve
+                  parameters:
+                    - {name: id, in: path, required: true, schema: {type: string}}
+            """
+    assert _tier_for(tmp_path, body) is SafetyTier.DELETE
+
+
+def test_swagger_2_document_is_rejected_with_a_clear_message(tmp_path: Path) -> None:
+    spec_path = tmp_path / "swagger.json"
+    spec_path.write_text(
+        dedent(
+            """
+            {
+              "swagger": "2.0",
+              "info": {"title": "Old", "version": "1.0"},
+              "paths": {}
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"swagger='2.0'.*not supported"):
+        load_openapi(spec_path)
 
 
 def test_load_openapi_resolves_chained_schema_refs(tmp_path: Path) -> None:
